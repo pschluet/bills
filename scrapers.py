@@ -7,6 +7,7 @@ from selenium.webdriver.firefox.options import Options
 from selenium.common.exceptions import TimeoutException
 import json
 from abc import ABCMeta, abstractmethod
+from concurrent.futures import ThreadPoolExecutor
 
 
 class LoginManager():
@@ -42,14 +43,18 @@ class BillDataScraper(metaclass=ABCMeta):
     _browserOptions.headless = True
     _loginManager = LoginManager()
 
+    def __init__(self):
+        self._browser = webdriver.Firefox(firefox_options=BillDataScraper._browserOptions)
+
     @abstractmethod
     def get_bill_info(self):
         pass
 
 
+class VerizonScraper(BillDataScraper):
+    pass
+
 class ComcastScraper(BillDataScraper):
-    def __init__(self):
-        self._browser = webdriver.Firefox(firefox_options=BillDataScraper._browserOptions)
 
     def get_bill_info(self):
         self._browser.get('https://customer.xfinity.com/#/billing')
@@ -78,6 +83,10 @@ class ComcastScraper(BillDataScraper):
 
 
 if __name__=="__main__":
-    comcast = ComcastScraper().get_bill_info()
+    executor = ThreadPoolExecutor(max_workers=4)
 
-    print('${} due on {}'.format(comcast.amtDue, comcast.dateDue))
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        comcast = executor.submit(ComcastScraper().get_bill_info)
+        comcast2 = executor.submit(ComcastScraper().get_bill_info)
+
+    print('${} due on {}'.format(comcast.result().amtDue, comcast.result().dateDue))
