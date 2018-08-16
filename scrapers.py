@@ -44,7 +44,7 @@ class BillDataScraper(metaclass=ABCMeta):
     _loginManager = LoginManager()
 
     def __init__(self):
-        self._browser = webdriver.Firefox(firefox_options=BillDataScraper._browserOptions)
+        self._browser = 0
 
     @abstractmethod
     def get_bill_info(self):
@@ -57,6 +57,7 @@ class VerizonScraper(BillDataScraper):
 class ComcastScraper(BillDataScraper):
 
     def get_bill_info(self):
+        self._browser = webdriver.Firefox(firefox_options=BillDataScraper._browserOptions)
         self._browser.get('https://customer.xfinity.com/#/billing')
         ScraperUtils.wait_until(self._browser, By.ID, 'user', 60)
 
