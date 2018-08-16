@@ -3,6 +3,7 @@ from datetime import datetime
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
+from selenium.webdriver.firefox.options import Options
 from selenium.common.exceptions import TimeoutException
 import json
 
@@ -15,7 +16,10 @@ def wait_until(browser, loc_type, id, timeout_sec):
 
 if __name__=="__main__":
     url = 'https://customer.xfinity.com/#/billing'
-    browser = webdriver.Firefox()
+
+    options = Options()
+    options.headless = True
+    browser = webdriver.Firefox(firefox_options=options)
     browser.get(url)
 
     with open('logins.json') as f:
