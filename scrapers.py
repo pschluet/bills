@@ -40,7 +40,7 @@ class BillInfo():
 
 class BillDataScraper(metaclass=ABCMeta):
     _browserOptions = Options()
-    _browserOptions.headless = True
+    _browserOptions.headless = False
     _loginManager = LoginManager()
 
     def __init__(self):
@@ -52,18 +52,37 @@ class BillDataScraper(metaclass=ABCMeta):
 
 
 class VerizonScraper(BillDataScraper):
-    pass
 
-class ComcastScraper(BillDataScraper):
+    def _login(self):
+        ScraperUtils.wait_until(self._browser, By.ID, 'IDToken1', 60)
+
+        self._browser.find_element_by_id('IDToken1').send_keys(BillDataScraper._loginManager.get_username('Verizon'))
+        self._browser.find_element_by_id('IDToken2').send_keys(BillDataScraper._loginManager.get_password('Verizon'))
+        self._browser.find_element_by_id('login-submit').click()
 
     def get_bill_info(self):
         self._browser = webdriver.Firefox(firefox_options=BillDataScraper._browserOptions)
-        self._browser.get('https://customer.xfinity.com/#/billing')
+        self._browser.get('https://myvpostpay.verizonwireless.com/ui/bill/ao/viewbill#!/')
+
+        self._login()
+
+        bp = 1
+
+
+class ComcastScraper(BillDataScraper):
+
+    def _login(self):
         ScraperUtils.wait_until(self._browser, By.ID, 'user', 60)
 
         self._browser.find_element_by_id('user').send_keys(BillDataScraper._loginManager.get_username('Comcast'))
         self._browser.find_element_by_id('passwd').send_keys(BillDataScraper._loginManager.get_password('Comcast'))
         self._browser.find_element_by_id('sign_in').click()
+
+    def get_bill_info(self):
+        self._browser = webdriver.Firefox(firefox_options=BillDataScraper._browserOptions)
+        self._browser.get('https://customer.xfinity.com/#/billing')
+
+        self._login()
 
         ScraperUtils.wait_until(self._browser, By.XPATH, "//td[text()[contains(.,'New charges')]]", 60)
 
@@ -88,6 +107,6 @@ if __name__=="__main__":
 
     with ThreadPoolExecutor(max_workers=4) as executor:
         comcast = executor.submit(ComcastScraper().get_bill_info)
-        comcast2 = executor.submit(ComcastScraper().get_bill_info)
+        verizon = executor.submit(VerizonScraper().get_bill_info)
 
     print('${} due on {}'.format(comcast.result().amtDue, comcast.result().dateDue))
