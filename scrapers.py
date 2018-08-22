@@ -8,9 +8,15 @@ from selenium.common.exceptions import TimeoutException
 import json
 from abc import ABCMeta, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
+from pprint import pprint
+
+from googleapiclient.discovery import build
+from httplib2 import Http
+from oauth2client import file, client, tools
+from apiclient import errors
 
 
-class LoginManager():
+class LoginManager:
     def __init__(self):
         with open('logins.json') as f:
             self._logins = json.load(f)
@@ -22,7 +28,7 @@ class LoginManager():
         return self._logins[service_name]['password']
 
 
-class ScraperUtils():
+class ScraperUtils:
     @staticmethod
     def wait_until(browser, loc_type, id, timeout_sec):
         try:
@@ -32,7 +38,7 @@ class ScraperUtils():
         return True
 
 
-class BillInfo():
+class BillInfo:
     def __init__(self, amt_due, date_due):
         self.amtDue = amt_due
         self.dateDue = date_due
@@ -49,6 +55,47 @@ class BillDataScraper(metaclass=ABCMeta):
     @abstractmethod
     def get_bill_info(self):
         pass
+
+class GmailScraper:
+    _SCOPES = 'https://www.googleapis.com/auth/gmail.readonly'
+
+    def __init__(self):
+        self._service = self._login()
+        pass
+
+    def _login(self):
+        store = file.Storage('token.json')
+        creds = store.get()
+        if not creds or creds.invalid:
+            flow = client.flow_from_clientsecrets('credentials.json', self._SCOPES)
+            creds = tools.run_flow(flow, store)
+        return build('gmail', 'v1', http=creds.authorize(Http()))
+
+    def get_emails_from(self, from_address):
+        out = []
+        ids = self._get_email_ids_matching_query('from:' + from_address)
+        for info in ids:
+            result = self._service.users().messages().get(userId='me', id=info['id'], format='full').execute()
+            if result:
+                out.append(result)
+        return out
+
+    def _get_email_ids_matching_query(self, query=''):
+        try:
+            response = self._service.users().messages().list(userId='me', q=query).execute()
+            messages = []
+            if 'messages' in response:
+                messages.extend(response['messages'])
+
+            while 'nextPageToken' in response:
+                page_token = response['nextPageToken']
+                response = self._service.users().messages().list(userId='me', q=query,
+                                                           pageToken=page_token).execute()
+                messages.extend(response['messages'])
+
+            return messages
+        except (errors.HttpError) as error:
+            print('An error occurred: {}'.format(error))
 
 
 class VerizonScraper(BillDataScraper):
@@ -101,12 +148,13 @@ class ComcastScraper(BillDataScraper):
         return BillInfo(amt_due=amt_due, date_due=date_due)
 
 
-
-if __name__=="__main__":
-    executor = ThreadPoolExecutor(max_workers=4)
-
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        comcast = executor.submit(ComcastScraper().get_bill_info)
-        verizon = executor.submit(VerizonScraper().get_bill_info)
-
-    print('${} due on {}'.format(comcast.result().amtDue, comcast.result().dateDue))
+if __name__ == "__main__":
+    gs = GmailScraper()
+    pprint(gs.get_emails_from('VZWMail@ecrmemail.verizonwireless.com'))
+    # executor = ThreadPoolExecutor(max_workers=4)
+    #
+    # with ThreadPoolExecutor(max_workers=4) as executor:
+    #     comcast = executor.submit(ComcastScraper().get_bill_info)
+    #     verizon = executor.submit(VerizonScraper().get_bill_info)
+    #
+    # print('${} due on {}'.format(comcast.result().amtDue, comcast.result().dateDue))
