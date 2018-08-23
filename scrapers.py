@@ -8,7 +8,7 @@ from selenium.common.exceptions import TimeoutException
 import json
 from abc import ABCMeta, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
-from pprint import pprint
+import base64
 
 from googleapiclient.discovery import build
 from httplib2 import Http
@@ -71,10 +71,17 @@ class GmailScraper:
             creds = tools.run_flow(flow, store)
         return build('gmail', 'v1', http=creds.authorize(Http()))
 
-    def get_emails_from(self, from_address):
+    def get_emails(self, from_email='', subject='', number=1):
         out = []
-        ids = self._get_email_ids_matching_query('from:' + from_address)
-        for info in ids:
+        query = ''
+        if from_email:
+            query += 'from:' + from_email + ' '
+        if subject:
+            query += 'subject:' + subject + ' '
+
+
+        ids = self._get_email_ids_matching_query(query)
+        for info in ids[:number]:
             result = self._service.users().messages().get(userId='me', id=info['id'], format='full').execute()
             if result:
                 out.append(result)
@@ -150,7 +157,9 @@ class ComcastScraper(BillDataScraper):
 
 if __name__ == "__main__":
     gs = GmailScraper()
-    pprint(gs.get_emails_from('VZWMail@ecrmemail.verizonwireless.com'))
+    mail = gs.get_emails(from_email='VZWMail@ecrmemail.verizonwireless.com', subject='"Your online bill is available"')
+    with open('out.txt','w') as f:
+        json.dump(mail,f,indent=4)
     # executor = ThreadPoolExecutor(max_workers=4)
     #
     # with ThreadPoolExecutor(max_workers=4) as executor:
