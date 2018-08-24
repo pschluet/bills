@@ -55,6 +55,7 @@ class BillDataScraper(metaclass=ABCMeta):
 
     def __init__(self):
         self._browser = 0
+        self._SERVICE_NAME = ''
 
     @abstractmethod
     def get_bill_info(self):
