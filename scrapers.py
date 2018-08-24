@@ -15,6 +15,8 @@ from httplib2 import Http
 from oauth2client import file, client, tools
 from apiclient import errors
 
+from database import BillInfo
+
 from bs4 import BeautifulSoup
 import re
 
@@ -41,11 +43,7 @@ class ScraperUtils:
         return True
 
 
-class BillInfo:
-    def __init__(self, amt_due, date_due, service):
-        self.amtDue = amt_due
-        self.dateDue = date_due
-        self.service = service
+
 
 
 class BillDataScraper(metaclass=ABCMeta):
@@ -137,7 +135,7 @@ class VerizonScraper(BillDataScraper):
         date_due = datetime.strptime(date_due_str, '%m/%d/%y').date()
         amt_due = float(amt_due_str.replace('$', ''))
 
-        return BillInfo(amt_due=amt_due, date_due=date_due, service=self._SERVICE_NAME)
+        return BillInfo(amt_due=amt_due, date_due=date_due, service_name=self._SERVICE_NAME)
 
 
 class ComcastScraper(BillDataScraper):
@@ -172,7 +170,7 @@ class ComcastScraper(BillDataScraper):
 
         self._browser.close()
 
-        return BillInfo(amt_due=amt_due, date_due=date_due, service=self._SERVICE_NAME)
+        return BillInfo(amt_due=amt_due, date_due=date_due, service_name=self._SERVICE_NAME)
 
 
 class ScraperExecutor:
@@ -198,4 +196,4 @@ if __name__ == "__main__":
     bill_info = scraperExecutor.get_bill_info()
 
     for info in bill_info:
-        print('{}: ${} due on {}'.format(info.service, info.amtDue, info.dateDue))
+        print('{}: ${} due on {}'.format(info.service_name, info.amt_due, info.date_due))
