@@ -15,6 +15,9 @@ from httplib2 import Http
 from oauth2client import file, client, tools
 from apiclient import errors
 
+from bs4 import BeautifulSoup
+import re
+
 
 class LoginManager:
     def __init__(self):
@@ -46,7 +49,7 @@ class BillInfo:
 
 class BillDataScraper(metaclass=ABCMeta):
     _browserOptions = Options()
-    _browserOptions.headless = False
+    _browserOptions.headless = True
     _loginManager = LoginManager()
 
     def __init__(self):
@@ -56,12 +59,12 @@ class BillDataScraper(metaclass=ABCMeta):
     def get_bill_info(self):
         pass
 
+
 class GmailScraper:
     _SCOPES = 'https://www.googleapis.com/auth/gmail.readonly'
 
     def __init__(self):
         self._service = self._login()
-        pass
 
     def _login(self):
         store = file.Storage('token.json')
@@ -71,7 +74,7 @@ class GmailScraper:
             creds = tools.run_flow(flow, store)
         return build('gmail', 'v1', http=creds.authorize(Http()))
 
-    def get_emails(self, from_email='', subject='', number=1):
+    def get_email_bodies(self, from_email='', subject='', number=1):
         out = []
         query = ''
         if from_email:
@@ -84,8 +87,16 @@ class GmailScraper:
         for info in ids[:number]:
             result = self._service.users().messages().get(userId='me', id=info['id'], format='full').execute()
             if result:
-                out.append(result)
+                out.append(self._get_largest_payload_part(result))
         return out
+
+    def _get_largest_payload_part(self, msg):
+        max_size = 0
+        body = ''
+        for part in msg['payload']['parts']:
+            if part['body']['size'] > max_size:
+                body = str(base64.urlsafe_b64decode(part['body']['data']))
+        return body
 
     def _get_email_ids_matching_query(self, query=''):
         try:
@@ -107,20 +118,23 @@ class GmailScraper:
 
 class VerizonScraper(BillDataScraper):
 
-    def _login(self):
-        ScraperUtils.wait_until(self._browser, By.ID, 'IDToken1', 60)
-
-        self._browser.find_element_by_id('IDToken1').send_keys(BillDataScraper._loginManager.get_username('Verizon'))
-        self._browser.find_element_by_id('IDToken2').send_keys(BillDataScraper._loginManager.get_password('Verizon'))
-        self._browser.find_element_by_id('login-submit').click()
+    def __init__(self):
+        self._gmail = 0
 
     def get_bill_info(self):
-        self._browser = webdriver.Firefox(firefox_options=BillDataScraper._browserOptions)
-        self._browser.get('https://myvpostpay.verizonwireless.com/ui/bill/ao/viewbill#!/')
+        self._gmail = GmailScraper()
+        email_html = self._gmail.get_email_bodies(from_email='VZWMail@ecrmemail.verizonwireless.com',
+                                                         subject='"Your online bill is available"',
+                                                         number=1)
+        soup = BeautifulSoup(email_html[0], 'html.parser')
 
-        self._login()
+        amt_due_str = soup.find('div', text=re.compile('\$\d+\.\d{2}')).text
+        date_due_str = soup.find('div', text=re.compile('\d{2}/\d{2}/\d{2}')).text
 
-        bp = 1
+        date_due = datetime.strptime(date_due_str, '%m/%d/%y').date()
+        amt_due = float(amt_due_str.replace('$', ''))
+
+        return BillInfo(amt_due=amt_due, date_due=date_due)
 
 
 class ComcastScraper(BillDataScraper):
@@ -156,14 +170,11 @@ class ComcastScraper(BillDataScraper):
 
 
 if __name__ == "__main__":
-    gs = GmailScraper()
-    mail = gs.get_emails(from_email='VZWMail@ecrmemail.verizonwireless.com', subject='"Your online bill is available"')
-    with open('out.txt','w') as f:
-        json.dump(mail,f,indent=4)
-    # executor = ThreadPoolExecutor(max_workers=4)
-    #
-    # with ThreadPoolExecutor(max_workers=4) as executor:
-    #     comcast = executor.submit(ComcastScraper().get_bill_info)
-    #     verizon = executor.submit(VerizonScraper().get_bill_info)
-    #
-    # print('${} due on {}'.format(comcast.result().amtDue, comcast.result().dateDue))
+    executor = ThreadPoolExecutor(max_workers=4)
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        comcast = executor.submit(ComcastScraper().get_bill_info)
+        verizon = executor.submit(VerizonScraper().get_bill_info)
+
+    print('Comcast: ${} due on {}'.format(comcast.result().amtDue, comcast.result().dateDue))
+    print('Verizon: ${} due on {}'.format(verizon.result().amtDue, verizon.result().dateDue))
