@@ -42,9 +42,10 @@ class ScraperUtils:
 
 
 class BillInfo:
-    def __init__(self, amt_due, date_due):
+    def __init__(self, amt_due, date_due, service):
         self.amtDue = amt_due
         self.dateDue = date_due
+        self.service = service
 
 
 class BillDataScraper(metaclass=ABCMeta):
@@ -120,6 +121,7 @@ class VerizonScraper(BillDataScraper):
 
     def __init__(self):
         self._gmail = 0
+        self._SERVICE_NAME = 'Verizon'
 
     def get_bill_info(self):
         self._gmail = GmailScraper()
@@ -134,10 +136,13 @@ class VerizonScraper(BillDataScraper):
         date_due = datetime.strptime(date_due_str, '%m/%d/%y').date()
         amt_due = float(amt_due_str.replace('$', ''))
 
-        return BillInfo(amt_due=amt_due, date_due=date_due)
+        return BillInfo(amt_due=amt_due, date_due=date_due, service=self._SERVICE_NAME)
 
 
 class ComcastScraper(BillDataScraper):
+
+    def __init__(self):
+        self._SERVICE_NAME = 'Comcast'
 
     def _login(self):
         ScraperUtils.wait_until(self._browser, By.ID, 'user', 60)
@@ -166,15 +171,30 @@ class ComcastScraper(BillDataScraper):
 
         self._browser.close()
 
-        return BillInfo(amt_due=amt_due, date_due=date_due)
+        return BillInfo(amt_due=amt_due, date_due=date_due, service=self._SERVICE_NAME)
+
+
+class ScraperExecutor:
+
+    def __init__(self, scrapers):
+        self._scrapers = scrapers
+        self._max_workers = max(len(scrapers), 4)
+
+    def get_bill_info(self):
+        bill_info_list = []
+
+        with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
+            for scraper in self._scrapers:
+                executor.submit(bill_info_list.append(scraper.get_bill_info()))
+
+        return bill_info_list
 
 
 if __name__ == "__main__":
-    executor = ThreadPoolExecutor(max_workers=4)
 
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        comcast = executor.submit(ComcastScraper().get_bill_info)
-        verizon = executor.submit(VerizonScraper().get_bill_info)
+    scraperExecutor = ScraperExecutor(scrapers=[ComcastScraper(), VerizonScraper()])
 
-    print('Comcast: ${} due on {}'.format(comcast.result().amtDue, comcast.result().dateDue))
-    print('Verizon: ${} due on {}'.format(verizon.result().amtDue, verizon.result().dateDue))
+    bill_info = scraperExecutor.get_bill_info()
+
+    for info in bill_info:
+        print('{}: ${} due on {}'.format(info.service, info.amtDue, info.dateDue))
