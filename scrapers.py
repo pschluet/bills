@@ -196,4 +196,5 @@ if __name__ == "__main__":
     bill_info = scraperExecutor.get_bill_info()
 
     for info in bill_info:
+        info.save_no_dups()
         print('{}: ${} due on {}'.format(info.service_name, info.amt_due, info.date_due))
