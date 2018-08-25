@@ -22,20 +22,43 @@ import re
 
 
 class LoginManager:
+    """
+    Handles parsing the logins.json file and delivers usernames and
+    passwords to consumers
+    """
     def __init__(self):
+        """Constructor: loads the logins.json file"""
         with open('logins.json') as f:
             self._logins = json.load(f)
 
     def get_username(self, service_name):
+        """
+        :param service_name: the service (i.e. 'Comcast', 'Verizon', etc.)
+        :return: a string username
+        """
         return self._logins[service_name]['username']
 
     def get_password(self, service_name):
+        """
+        :param service_name: the service (i.e. 'Comcast', 'Verizon', etc.)
+        :return: a string password
+        """
         return self._logins[service_name]['password']
 
 
 class ScraperUtils:
+    """Helper class to wait until a new page has loaded for scraping"""
     @staticmethod
     def wait_until(browser, loc_type, id, timeout_sec):
+        """
+        Wait until a particular DOM element exists on the page
+
+        :param browser: selenium WebDriver
+        :param loc_type: By type; locator strategy; the type of thing to wait for
+        :param id: the text defining the item to wait for
+        :param timeout_sec: time to wait in seconds
+        :return: True if the item was found within timeout, else False
+        """
         try:
             WebDriverWait(browser, timeout_sec).until(EC.presence_of_element_located((loc_type, id)))
         except TimeoutException:
@@ -43,10 +66,10 @@ class ScraperUtils:
         return True
 
 
-
-
-
 class BillDataScraper(metaclass=ABCMeta):
+    """
+    Abstract base class for all bill data scrapers
+    """
     _browserOptions = Options()
     _browserOptions.headless = True
     _loginManager = LoginManager()
@@ -57,16 +80,28 @@ class BillDataScraper(metaclass=ABCMeta):
 
     @abstractmethod
     def get_bill_info(self):
+        """
+        Scrape the bill information
+        :return: a BillInfo object representing information about bills
+        """
         pass
 
 
 class GmailScraper:
+    """
+    A class to handle scraping Gmail messages
+    """
     _SCOPES = 'https://www.googleapis.com/auth/gmail.readonly'
 
     def __init__(self):
         self._service = self._login()
 
     def _login(self):
+        """
+        Authenticate with the Gmail service
+
+        :return: A Resource object with methods for interacting with the service
+        """
         store = file.Storage('token.json')
         creds = store.get()
         if not creds or creds.invalid:
@@ -75,13 +110,20 @@ class GmailScraper:
         return build('gmail', 'v1', http=creds.authorize(Http()))
 
     def get_email_bodies(self, from_email='', subject='', number=1):
+        """
+        Get the bodies of e-mails that match the provided search filters
+
+        :param from_email: the e-mail address that sent the e-mail
+        :param subject: the subject of the e-mail
+        :param number: the number of e-mails to retrieve
+        :return: a list of strings (bodies of e-mails)
+        """
         out = []
         query = ''
         if from_email:
             query += 'from:' + from_email + ' '
         if subject:
             query += 'subject:' + subject + ' '
-
 
         ids = self._get_email_ids_matching_query(query)
         for info in ids[:number]:
@@ -91,6 +133,12 @@ class GmailScraper:
         return out
 
     def _get_largest_payload_part(self, msg):
+        """
+        Search through the e-mail payload and pick out the largest one. Assume that's the body.
+
+        :param msg: A gmail message
+        :return: A string; the gmail message body
+        """
         max_size = 0
         body = ''
         for part in msg['payload']['parts']:
@@ -99,6 +147,12 @@ class GmailScraper:
         return body
 
     def _get_email_ids_matching_query(self, query=''):
+        """
+        Get a list of e-mail IDs and thread IDs that match the search query
+
+        :param query: query string; same format that would be used in Gmail search field
+        :return: a list of dicts; each dict has the keys: 'id', 'threadId'
+        """
         try:
             response = self._service.users().messages().list(userId='me', q=query).execute()
             messages = []
@@ -117,12 +171,20 @@ class GmailScraper:
 
 
 class VerizonScraper(BillDataScraper):
+    """
+    Class to scrape Verizon e-mails for billing information
+    """
 
     def __init__(self):
         self._gmail = 0
         self._SERVICE_NAME = 'Verizon'
 
     def get_bill_info(self):
+        """
+        Scrape the Verizon e-mails for billing information
+
+        :return: a BillInfo object representing information about bills
+        """
         self._gmail = GmailScraper()
         email_html = self._gmail.get_email_bodies(from_email='VZWMail@ecrmemail.verizonwireless.com',
                                                          subject='"Your online bill is available"',
@@ -139,11 +201,17 @@ class VerizonScraper(BillDataScraper):
 
 
 class ComcastScraper(BillDataScraper):
+    """
+    Class to scrape the Comcast website for billing information
+    """
 
     def __init__(self):
         self._SERVICE_NAME = 'Comcast'
 
     def _login(self):
+        """
+        Login to the Comcast website
+        """
         ScraperUtils.wait_until(self._browser, By.ID, 'user', 60)
 
         self._browser.find_element_by_id('user').send_keys(BillDataScraper._loginManager.get_username('Comcast'))
@@ -151,6 +219,11 @@ class ComcastScraper(BillDataScraper):
         self._browser.find_element_by_id('sign_in').click()
 
     def get_bill_info(self):
+        """
+        Scrape the Comcast website for billing information
+
+        :return: a BillInfo object representing information about bills
+        """
         self._browser = webdriver.Firefox(firefox_options=BillDataScraper._browserOptions)
         self._browser.get('https://customer.xfinity.com/#/billing')
 
@@ -174,12 +247,25 @@ class ComcastScraper(BillDataScraper):
 
 
 class ScraperExecutor:
+    """
+    A class for executing scraping operations in parallel
+    """
 
     def __init__(self, scrapers):
+        """
+        Constructor
+
+        :param scrapers: A list of BillDataScraper subclass instances
+        """
         self._scrapers = scrapers
         self._max_workers = max(len(scrapers), 4)
 
     def get_bill_info(self):
+        """
+        Execute the scraping operations in a multi-threaded fashion (in parallel)
+
+        :return: a list of BillInfo objects
+        """
         bill_info_list = []
 
         with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
