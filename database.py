@@ -12,7 +12,7 @@ class BillInfo(Document):
         # If there is already a document with this service name and date
         # update the amount with the new amount. Otherwise, make a new
         # document
-        BillInfo.objects(service_name=b.service_name, date_due=b.date_due)\
+        BillInfo.objects(service_name=self.service_name, date_due=self.date_due)\
             .update_one(set__amt_due=self.amt_due, upsert=True)
 
 
