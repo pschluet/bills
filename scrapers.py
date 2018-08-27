@@ -9,14 +9,11 @@ import json
 from abc import ABCMeta, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
 import base64
-
 from googleapiclient.discovery import build
 from httplib2 import Http
 from oauth2client import file, client, tools
 from apiclient import errors
-
 from database import BillInfo
-
 from bs4 import BeautifulSoup
 import re
 
