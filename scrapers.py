@@ -13,9 +13,10 @@ from googleapiclient.discovery import build
 from httplib2 import Http
 from oauth2client import file, client, tools
 from apiclient import errors
-from database import BillInfo
+from database import BillInfo, ExecutionStatus
 from bs4 import BeautifulSoup
 import re
+import sys
 
 
 class LoginManager:
@@ -79,7 +80,7 @@ class BillDataScraper(metaclass=ABCMeta):
     def get_bill_info(self):
         """
         Scrape the bill information
-        :return: a BillInfo object representing information about bills
+        :return: a (ExecutionStatus, BillInfo) tuple representing information about bills and execution success
         """
         pass
 
@@ -180,21 +181,33 @@ class VerizonScraper(BillDataScraper):
         """
         Scrape the Verizon e-mails for billing information
 
-        :return: a BillInfo object representing information about bills
+        :return: a (ExecutionStatus, BillInfo) tuple representing information about bills and execution success
         """
-        self._gmail = GmailScraper()
-        email_html = self._gmail.get_email_bodies(from_email='VZWMail@ecrmemail.verizonwireless.com',
-                                                         subject='"Your online bill is available"',
-                                                         number=1)
-        soup = BeautifulSoup(email_html[0], 'html.parser')
+        try:
+            self._gmail = GmailScraper()
+            email_html = self._gmail.get_email_bodies(from_email='VZWMail@ecrmemail.verizonwireless.com',
+                                                             subject='"Your online bill is available"',
+                                                             number=1)
+            soup = BeautifulSoup(email_html[0], 'html.parser')
 
-        amt_due_str = soup.find('div', text=re.compile('\$\d+\.\d{2}')).text
-        date_due_str = soup.find('div', text=re.compile('\d{2}/\d{2}/\d{2}')).text
+            amt_due_str = soup.find('div', text=re.compile('\$\d+\.\d{2}')).text
+            date_due_str = soup.find('div', text=re.compile('\d{2}/\d{2}/\d{2}')).text
 
-        date_due = datetime.strptime(date_due_str, '%m/%d/%y').date()
-        amt_due = float(amt_due_str.replace('$', ''))
+            date_due = datetime.strptime(date_due_str, '%m/%d/%y').date()
+            amt_due = float(amt_due_str.replace('$', ''))
 
-        return BillInfo(amt_due=amt_due, date_due=date_due, service_name=self._SERVICE_NAME)
+            err_msg = ''
+            success = True
+        except:
+            err_msg = sys.exc_info()[0]
+            print(err_msg)
+            amt_due = 0
+            date_due = 0
+            success = False
+
+        return (ExecutionStatus(service_name=self._SERVICE_NAME, success=success,
+                                exec_time=datetime.now(), error_message=err_msg),
+                BillInfo(amt_due=amt_due, date_due=date_due, service_name=self._SERVICE_NAME))
 
 
 class ComcastScraper(BillDataScraper):
@@ -219,28 +232,40 @@ class ComcastScraper(BillDataScraper):
         """
         Scrape the Comcast website for billing information
 
-        :return: a BillInfo object representing information about bills
+        :return: a (ExecutionStatus, BillInfo) tuple representing information about bills and execution success
         """
-        self._browser = webdriver.Firefox(firefox_options=BillDataScraper._browserOptions)
-        self._browser.get('https://customer.xfinity.com/#/billing')
+        try:
+            self._browser = webdriver.Firefox(firefox_options=BillDataScraper._browserOptions)
+            self._browser.get('https://customer.xfinity.com/#/billing')
 
-        self._login()
+            self._login()
 
-        ScraperUtils.wait_until(self._browser, By.XPATH, "//td[text()[contains(.,'New charges')]]", 60)
+            ScraperUtils.wait_until(self._browser, By.XPATH, "//td[text()[contains(.,'New charges')]]", 60)
 
-        date_element = self._browser.find_element_by_xpath("//td[text()[contains(.,'New charges')]]")
-        amt_element = self._browser.find_element_by_class_name(
-            date_element.get_attribute('class').replace('name', 'value').replace(' ', ','))
+            date_element = self._browser.find_element_by_xpath("//td[text()[contains(.,'New charges')]]")
+            amt_element = self._browser.find_element_by_class_name(
+                date_element.get_attribute('class').replace('name', 'value').replace(' ', ','))
 
-        date_due_str = date_element.get_attribute('innerText')
-        amt_due_str = amt_element.get_attribute('innerText')
+            date_due_str = date_element.get_attribute('innerText')
+            amt_due_str = amt_element.get_attribute('innerText')
 
-        date_due = datetime.strptime(date_due_str, 'New charges due %B %d, %Y').date()
-        amt_due = float(amt_due_str.replace('$', ''))
+            date_due = datetime.strptime(date_due_str, 'New charges due %B %d, %Y').date()
+            amt_due = float(amt_due_str.replace('$', ''))
 
-        self._browser.close()
+            self._browser.close()
 
-        return BillInfo(amt_due=amt_due, date_due=date_due, service_name=self._SERVICE_NAME)
+            err_msg = ''
+            success = True
+        except:
+            err_msg = sys.exc_info()[0]
+            print(err_msg)
+            amt_due = 0
+            date_due = 0
+            success = False
+
+        return (ExecutionStatus(service_name=self._SERVICE_NAME, success=success,
+                                exec_time=datetime.now(), error_message=err_msg),
+                BillInfo(amt_due=amt_due, date_due=date_due, service_name=self._SERVICE_NAME))
 
 
 class ScraperExecutor:
@@ -261,7 +286,7 @@ class ScraperExecutor:
         """
         Execute the scraping operations in a multi-threaded fashion (in parallel)
 
-        :return: a list of BillInfo objects
+        :return: a list of (ExecutionStatus, BillInfo) tuples
         """
         bill_info_list = []
 
@@ -276,8 +301,10 @@ if __name__ == "__main__":
 
     scraperExecutor = ScraperExecutor(scrapers=[ComcastScraper(), VerizonScraper()])
 
-    bill_info = scraperExecutor.get_bill_info()
+    scraping_data = scraperExecutor.get_bill_info()
 
-    for info in bill_info:
-        info.save_no_dups()
-        print('{}: ${} due on {}'.format(info.service_name, info.amt_due, info.date_due))
+    for data_item in scraping_data:
+        data_item[0].save_no_dups()
+        if data_item[0].success:
+            data_item[1].save_no_dups()
+            print('{}: ${} due on {}'.format(data_item[1].service_name, data_item[1].amt_due, data_item[1].date_due))

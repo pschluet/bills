@@ -1,7 +1,16 @@
 from abc import ABCMeta, abstractmethod
 from mongoengine import *
 from datetime import datetime
+from mongoengine.document import TopLevelDocumentMetaclass
 connect(db='bills', host='10.0.1.2', port=27017)
+
+
+class Meta(ABCMeta, TopLevelDocumentMetaclass):
+    """
+    Needed to support double inheritance with base classes having different metaclasses (i.e.
+    BillInfo inheriting from Document and DatabaseItem)
+    """
+    pass
 
 
 class DatabaseItem(metaclass=ABCMeta):
@@ -13,7 +22,7 @@ class DatabaseItem(metaclass=ABCMeta):
         pass
 
 
-class BillInfo(Document, DatabaseItem):
+class BillInfo(Document, DatabaseItem, metaclass=Meta):
     """
     A class that represents billing information.
 
@@ -35,7 +44,7 @@ class BillInfo(Document, DatabaseItem):
             .update_one(set__amt_due=self.amt_due, upsert=True)
 
 
-class ExecutionStatus(Document, DatabaseItem):
+class ExecutionStatus(Document, DatabaseItem, metaclass=Meta):
     """
     A class that represents the success or failure of a scraping operation.
 
