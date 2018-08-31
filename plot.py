@@ -15,7 +15,7 @@ def make_exec_status_plot(service_name):
     p.circle(pass_data.exec_time, pass_data.success, size=marker_size, color='green', alpha=0.5)
 
     if len(fail_data) > 0:
-        p.circle(fail_data.exec_time, pass_data.success, size=marker_size, color='green', alpha=0.5)
+        p.circle(fail_data.exec_time, pass_data.success, size=marker_size, color='red', alpha=0.5)
 
     p.xaxis[0].axis_label = 'Scraper Execution Time'
     p.yaxis[0].axis_label = 'Pass/Fail'
