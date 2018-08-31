@@ -1,4 +1,5 @@
 beautifulsoup4==4.6.3
+bokeh==0.13.0
 bs4==0.0.1
 cachetools==2.1.0
 click==6.7
@@ -12,13 +13,19 @@ itsdangerous==0.24
 Jinja2==2.10
 MarkupSafe==1.0
 mongoengine==0.15.3
+numpy==1.15.1
 oauth2client==4.1.2
+packaging==17.1
 pyasn1==0.4.4
 pyasn1-modules==0.2.2
 pymongo==3.7.1
+pyparsing==2.2.0
+python-dateutil==2.7.3
+PyYAML==3.13
 rsa==3.4.2
 selenium==3.14.0
 six==1.11.0
+tornado==5.1
 uritemplate==3.0.0
 urllib3==1.23
 Werkzeug==0.14.1

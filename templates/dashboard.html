@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link href="http://cdn.pydata.org/bokeh/release/bokeh-0.13.0.min.css" rel="stylesheet" type="text/css">
+    <script src="http://cdn.pydata.org/bokeh/release/bokeh-0.13.0.min.js"></script>
+
+    <meta charset="UTF-8">
+    <title>Bill Data Dashboard</title>
+</head>
+<body>
+    <h1>Scraper Execution History</h1>
+    <div>
+        {{ exec_status_div | safe }}
+        {{ exec_status_script | safe }}
+    </div>
+    <!--<div style="width: 20%; display: inline-block;">-->
+        <!--{{ div2 | safe }}-->
+        <!--{{ script2 | safe }}-->
+    <!--</div>-->
+</body>
+</html>
