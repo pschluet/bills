@@ -21,6 +21,10 @@ class DatabaseItem(metaclass=ABCMeta):
     def save_no_dups(self):
         pass
 
+    @abstractmethod
+    def to_dict(self):
+        pass
+
 
 class BillInfo(Document, DatabaseItem, metaclass=Meta):
     """
@@ -31,6 +35,18 @@ class BillInfo(Document, DatabaseItem, metaclass=Meta):
     amt_due = DecimalField(required=True)
     date_due = DateTimeField(required=True)
     service_name = StringField(required=True)
+
+    def to_dict(self):
+        """
+        Convert object to dictionary for ease of loading into pandas for plotting
+
+        :return: a dictionary that represents this object
+        """
+        return {
+            "amt_due": self.amt_due,
+            "date_due": self.date_due,
+            "service_name": self.service_name
+        }
 
     def save_no_dups(self):
         """
@@ -54,6 +70,19 @@ class ExecutionStatus(Document, DatabaseItem, metaclass=Meta):
     success = BooleanField(required=True)
     exec_time = DateTimeField(required=True)
     error_message = StringField()
+
+    def to_dict(self):
+        """
+        Convert object to dictionary for ease of loading into pandas for plotting
+
+        :return: a dictionary that represents this object
+        """
+        return {
+            "service_name": self.service_name,
+            "success": self.success,
+            "exec_time": self.exec_time,
+            "error_message": self.error_message
+        }
 
     def save_no_dups(self):
         """
