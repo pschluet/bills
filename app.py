@@ -8,8 +8,9 @@ app = Flask(__name__)
 
 @app.route('/')
 def index():
-    p = figure()
+    p = figure(plot_width=10, plot_height=4)
     p.circle([1, 2, 3, 4, 5], [6, 7, 2, 4, 5], size=20, color="navy", alpha=0.5)
+    p.sizing_mode = 'scale_both'
 
     script, div = components(p)
 
