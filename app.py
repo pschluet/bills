@@ -2,19 +2,23 @@ from flask import Flask, render_template
 from bokeh.embed import components
 from database import BillInfo, ExecutionStatus
 from bokeh.plotting import figure
+from plot import make_exec_status_plot
 
 app = Flask(__name__)
 
 
 @app.route('/')
 def index():
-    p = figure(plot_width=10, plot_height=4)
-    p.circle([1, 2, 3, 4, 5], [6, 7, 2, 4, 5], size=20, color="navy", alpha=0.5)
-    p.sizing_mode = 'scale_both'
 
-    script, div = components(p)
+    v_script, v_div = make_exec_status_plot('Verizon')
+    c_script, c_div = make_exec_status_plot('Comcast')
 
-    return render_template('dashboard.html', exec_status_script=script, exec_status_div=div)
+
+    return render_template('dashboard.html',
+                           verizon_exec_stat_script=v_script,
+                           verizon_exec_stat_div=v_div,
+                           comcast_exec_stat_script=c_script,
+                           comcast_exec_stat_div=c_div)
 
 
 @app.route('/data/')
