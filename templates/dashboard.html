@@ -3,19 +3,19 @@
 <head>
     <link href="http://cdn.pydata.org/bokeh/release/bokeh-0.13.0.min.css" rel="stylesheet" type="text/css">
     <script src="http://cdn.pydata.org/bokeh/release/bokeh-0.13.0.min.js"></script>
+    {{ script | safe }}
 
     <meta charset="UTF-8">
     <title>Bill Data Dashboard</title>
 </head>
 <body>
+    <h1>Bill History</h1>
+    <div>
+        {{ bill_info_plot_div | safe }}
+    </div>
     <h1>Scraper Execution History</h1>
     <div>
-        {{ verizon_exec_stat_div | safe }}
-        {{ verizon_exec_stat_script | safe }}
-    </div>
-    <div>
-        {{ comcast_exec_stat_div | safe }}
-        {{ comcast_exec_stat_script | safe }}
+        {{ exec_status_plot_div | safe }}
     </div>
 </body>
 </html>
