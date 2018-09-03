@@ -7,6 +7,9 @@ from abc import ABCMeta, abstractmethod
 
 
 class Plotter(metaclass=ABCMeta):
+    """
+    Abstract base class for all classes that generate plot layouts
+    """
     def make_plot_layout(self):
         """
         :return: bokeh Row or Column with the generated plot components
@@ -44,6 +47,9 @@ class Plotter(metaclass=ABCMeta):
 
 
 class ExecutionStatusPlotter(Plotter):
+    """
+    Handles creating plots of scraper execution status
+    """
 
     def __init__(self):
         self.MARKER_SIZE = 15
@@ -69,6 +75,9 @@ class ExecutionStatusPlotter(Plotter):
 
 
 class BillInfoPlotter(Plotter):
+    """
+    Handles creating plots of scraped billing information
+    """
 
     def __init__(self):
         self.MARKER_SIZE = 15
