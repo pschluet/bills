@@ -1,8 +1,7 @@
 from flask import Flask, render_template
 from bokeh.embed import components
-from database import BillInfo, ExecutionStatus
-from bokeh.plotting import figure
-from plot import make_exec_status_plots, make_bill_info_plots
+from database import BillInfo
+from plot import ExecutionStatusPlotter, BillInfoPlotter
 
 app = Flask(__name__)
 
@@ -10,10 +9,9 @@ app = Flask(__name__)
 @app.route('/')
 def index():
 
-    exec_status_plots = make_exec_status_plots()
-    bill_info_plots = make_bill_info_plots()
+    plotters = [ExecutionStatusPlotter(), BillInfoPlotter()]
 
-    script, (exec_status_plot_div, bill_info_plot_div) = components([exec_status_plots, bill_info_plots])
+    script, (exec_status_plot_div, bill_info_plot_div) = components([x.make_plot_layout() for x in plotters])
 
     return render_template('dashboard.html',
                            script=script,
