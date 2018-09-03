@@ -1,4 +1,5 @@
 from abc import ABCMeta, abstractmethod
+from events import Observer, EventTypes
 from mongoengine import *
 from datetime import datetime
 from mongoengine.document import TopLevelDocumentMetaclass
@@ -94,6 +95,27 @@ class ExecutionStatus(Document, DatabaseItem, metaclass=Meta):
         """
         ExecutionStatus.objects(service_name=self.service_name, exec_time=self.exec_time)\
             .update_one(set__success=self.success, set__error_message=self.error_message, upsert=True)
+
+
+class ScrapeResultSaveHandler(Observer):
+    """
+    Handles saving scraping results to the database
+    """
+    def __init__(self):
+        Observer.__init__(self)
+
+    def handle_scraping_result(self, data):
+        """
+        Handles events of type EventTypes.SCRAPING_EXECUTION_FINISHED
+
+        :param data: ScrapingExecutionFinishedEventData event data object
+        """
+        data.exec_status.save_no_dups()
+        if data.exec_status.success:
+            data.billing_info.save_no_dups()
+            print('{}: ${} due on {}'.format(data.billing_info.service_name, data.billing_info.amt_due,
+                                             data.billing_info.date_due))
+
 
 if __name__ == "__main__":
     b = BillInfo(amt_due=40.07, date_due=datetime.strptime('01/05/18', '%m/%d/%y').date(), service_name='Verizon')

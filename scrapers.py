@@ -13,10 +13,27 @@ from googleapiclient.discovery import build
 from httplib2 import Http
 from oauth2client import file, client, tools
 from apiclient import errors
-from database import BillInfo, ExecutionStatus
+from database import BillInfo, ExecutionStatus, ScrapeResultSaveHandler
 from bs4 import BeautifulSoup
 import re
 import sys
+from events import Event, EventTypes, Observer, ScrapingExecutionFinishedEventData
+
+
+class ScrapeResultEmailNotifier(Observer):
+    """
+    Handles notifications of scraping results via e-mail
+    """
+    def __init__(self):
+        Observer.__init__(self)
+
+    def handle_scraping_result(self, data):
+        """
+        Handles events of type EventTypes.SCRAPING_EXECUTION_FINISHED
+
+        :param data: ScrapingExecutionFinishedEventData event data object
+        """
+        print('Notifying: ' + str(data))
 
 
 class LoginManager:
@@ -76,8 +93,17 @@ class BillDataScraper(metaclass=ABCMeta):
         self._browser = 0
         self._SERVICE_NAME = ''
 
+    def scrape_data(self):
+        """
+        Perform the scraping operation and fire off an event that notifies listeners with the result
+        """
+        result = self._get_bill_info()
+        # Fire off event to notify listeners
+        Event(event_type=EventTypes.SCRAPING_EXECUTION_FINISHED, data=result)
+
+
     @abstractmethod
-    def get_bill_info(self):
+    def _get_bill_info(self):
         """
         Scrape the bill information
         :return: a (ExecutionStatus, BillInfo) tuple representing information about bills and execution success
@@ -177,11 +203,11 @@ class VerizonScraper(BillDataScraper):
         self._gmail = 0
         self._SERVICE_NAME = 'Verizon'
 
-    def get_bill_info(self):
+    def _get_bill_info(self):
         """
         Scrape the Verizon e-mails for billing information
 
-        :return: a (ExecutionStatus, BillInfo) tuple representing information about bills and execution success
+        :return: a ScrapingExecutionFinishedEventData object representing information about bills and execution success
         """
         try:
             self._gmail = GmailScraper()
@@ -205,8 +231,8 @@ class VerizonScraper(BillDataScraper):
             date_due = 0
             success = False
 
-        return (ExecutionStatus(service_name=self._SERVICE_NAME, success=success,
-                                exec_time=datetime.now(), error_message=err_msg),
+        return ScrapingExecutionFinishedEventData(ExecutionStatus(service_name=self._SERVICE_NAME, success=success,
+                                                                  exec_time=datetime.now(), error_message=err_msg),
                 BillInfo(amt_due=amt_due, date_due=date_due, service_name=self._SERVICE_NAME))
 
 
@@ -228,11 +254,11 @@ class ComcastScraper(BillDataScraper):
         self._browser.find_element_by_id('passwd').send_keys(BillDataScraper._loginManager.get_password('Comcast'))
         self._browser.find_element_by_id('sign_in').click()
 
-    def get_bill_info(self):
+    def _get_bill_info(self):
         """
         Scrape the Comcast website for billing information
 
-        :return: a (ExecutionStatus, BillInfo) tuple representing information about bills and execution success
+        :return: a ScrapingExecutionFinishedEventData object representing information about bills and execution success
         """
         try:
             self._browser = webdriver.Firefox(firefox_options=BillDataScraper._browserOptions)
@@ -263,9 +289,9 @@ class ComcastScraper(BillDataScraper):
             date_due = 0
             success = False
 
-        return (ExecutionStatus(service_name=self._SERVICE_NAME, success=success,
-                                exec_time=datetime.now(), error_message=err_msg),
-                BillInfo(amt_due=amt_due, date_due=date_due, service_name=self._SERVICE_NAME))
+        return ScrapingExecutionFinishedEventData(ExecutionStatus(service_name=self._SERVICE_NAME, success=success,
+                                                                  exec_time=datetime.now(), error_message=err_msg),
+            BillInfo(amt_due=amt_due, date_due=date_due, service_name=self._SERVICE_NAME))
 
 
 class ScraperExecutor:
@@ -285,26 +311,23 @@ class ScraperExecutor:
     def get_bill_info(self):
         """
         Execute the scraping operations in a multi-threaded fashion (in parallel)
-
-        :return: a list of (ExecutionStatus, BillInfo) tuples
         """
-        bill_info_list = []
 
         with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
             for scraper in self._scrapers:
-                executor.submit(bill_info_list.append(scraper.get_bill_info()))
-
-        return bill_info_list
+                executor.submit(scraper.scrape_data())
 
 
 if __name__ == "__main__":
 
     scraperExecutor = ScraperExecutor(scrapers=[ComcastScraper(), VerizonScraper()])
 
-    scraping_data = scraperExecutor.get_bill_info()
+    saveHandler = ScrapeResultSaveHandler()
+    emailer = ScrapeResultEmailNotifier()
 
-    for data_item in scraping_data:
-        data_item[0].save_no_dups()
-        if data_item[0].success:
-            data_item[1].save_no_dups()
-            print('{}: ${} due on {}'.format(data_item[1].service_name, data_item[1].amt_due, data_item[1].date_due))
+    # Hook up event listeners
+    saveHandler.observe(event_type=EventTypes.SCRAPING_EXECUTION_FINISHED, callback=saveHandler.handle_scraping_result)
+    emailer.observe(event_type=EventTypes.SCRAPING_EXECUTION_FINISHED, callback=emailer.handle_scraping_result)
+
+    # Execute scraping operations
+    scraperExecutor.get_bill_info()
