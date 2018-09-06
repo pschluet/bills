@@ -10,6 +10,7 @@ from abc import ABCMeta, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
 import base64
 from googleapiclient.discovery import build
+from email.mime.text import MIMEText
 from httplib2 import Http
 from oauth2client import file, client, tools
 from apiclient import errors
@@ -33,7 +34,21 @@ class ScrapeResultEmailNotifier(Observer):
 
         :param data: ScrapingExecutionFinishedEventData event data object
         """
-        print('Notifying: ' + str(data))
+        success = 'Success' if data.exec_status.success else 'Failure'
+        err_msg = '' if data.exec_status.success else '\nError: '.format(data.exec_status.error_message)
+
+        gmail = GmailScraper()
+        gmail.send_email(
+            to=GmailScraper.MY_EMAIL,
+            sender=GmailScraper.MY_EMAIL,
+            subject='{} Scrape {}'.format(data.exec_status.service_name, success),
+            body='{}\n${:.2f} due on {}\nExecution time: {}{}'.format(
+                data.billing_info.service_name,
+                data.billing_info.amt_due,
+                data.billing_info.date_due,
+                data.exec_status.exec_time,
+                err_msg)
+        )
 
 
 class LoginManager:
@@ -115,7 +130,9 @@ class GmailScraper:
     """
     A class to handle scraping Gmail messages
     """
-    _SCOPES = 'https://www.googleapis.com/auth/gmail.readonly'
+    _SCOPES = ['https://www.googleapis.com/auth/gmail.send',
+               'https://www.googleapis.com/auth/gmail.readonly']
+    MY_EMAIL = 'paul@paulschlueter.com'
 
     def __init__(self):
         self._service = self._login()
@@ -132,6 +149,41 @@ class GmailScraper:
             flow = client.flow_from_clientsecrets('credentials.json', self._SCOPES)
             creds = tools.run_flow(flow, store)
         return build('gmail', 'v1', http=creds.authorize(Http()))
+
+    def send_email(self, to, sender, subject, body):
+        """
+        Send an e-mail through my e-mail account
+
+        :param to: e-mail address of the receiver
+        :param sender: e-mail address of the sender
+        :param subject: the subject of the e-mail message
+        :param body: the text/body of the e-mail message
+        :return: the message that was sent
+        """
+        msg = self._create_message(to=to, sender=sender, subject=subject, body=body)
+
+        try:
+            message = self._service.users().messages().send(userId='me', body=msg).execute()
+            print('E-mail sent with ID {}'.format(message['id']))
+            return message
+        except errors.HttpError as error:
+            print('An error occurred sending an e-mail: {}'.format(error))
+
+    def _create_message(self, to, sender, subject, body):
+        """
+        Create a message for an e-mail
+
+        :param to: e-mail address of the receiver
+        :param sender: e-mail address of the sender
+        :param subject: the subject of the e-mail message
+        :param body: the text/body of the e-mail message
+        :return: a dict containing a base64url encoded e-mail object
+        """
+        message = MIMEText(body)
+        message['to'] = to
+        message['from'] = sender
+        message['subject'] = subject
+        return {'raw': base64.urlsafe_b64encode(message.as_string().encode()).decode()}
 
     def get_email_bodies(self, from_email='', subject='', number=1):
         """
@@ -190,7 +242,7 @@ class GmailScraper:
                 messages.extend(response['messages'])
 
             return messages
-        except (errors.HttpError) as error:
+        except errors.HttpError as error:
             print('An error occurred: {}'.format(error))
 
 
